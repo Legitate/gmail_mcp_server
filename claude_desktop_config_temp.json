@@ -1,0 +1,16 @@
+{
+    "mcpServers": {
+        "employee-server-stdio": {
+            "command": "node",
+            "args": [
+                "/Users/vigneshdhanraj/Desktop/Altrosyn/mcp_server_http/Deployment/run_stdio.js"
+            ]
+        },
+        "gmail-mcp-server": {
+            "command": "/Users/vigneshdhanraj/.nvm/versions/node/v24.11.1/bin/node",
+            "args": [
+                "/Users/vigneshdhanraj/Desktop/Altrosyn/mcp_gmail/src/index.js"
+            ]
+        }
+    }
+}
