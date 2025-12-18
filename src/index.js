@@ -13,6 +13,14 @@ const listMessagesTool = require('./tools/list_messages');
 const getMessageTool = require('./tools/get_message');
 const sendEmailTool = require('./tools/send_email');
 const createDraftTool = require('./tools/create_draft');
+const searchMessagesTool = require('./tools/search_messages');
+const deleteMessageTool = require('./tools/delete_message');
+const modifyLabelsTool = require('./tools/modify_labels');
+const listLabelsTool = require('./tools/list_labels');
+const getThreadTool = require('./tools/get_thread');
+const getAttachmentTool = require('./tools/get_attachment');
+const starMessageTool = require('./tools/star_message');
+const listStarredMessagesTool = require('./tools/list_starred_messages');
 const logger = require('./utils/logger');
 
 const server = new Server(
@@ -128,6 +136,146 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     },
                     required: ["to", "subject", "body"]
                 }
+            },
+            {
+                name: "gmail_search_messages",
+                description: "Search messages using Gmail's query format.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        query: {
+                            type: "string",
+                            description: "Gmail search query (e.g. 'from:user@example.com')"
+                        },
+                        maxResults: {
+                            type: "integer",
+                            description: "Maximum number of results to return",
+                            default: 10
+                        },
+                        includeSpamTrash: {
+                            type: "boolean",
+                            description: "Whether to include spam and trash in results",
+                            default: false
+                        }
+                    },
+                    required: ["query"]
+                }
+            },
+            {
+                name: "gmail_delete_message",
+                description: "Delete or trash a message.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        id: {
+                            type: "string",
+                            description: "The ID of the message to delete"
+                        },
+                        permanent: {
+                            type: "boolean",
+                            description: "If true, permanently deletes the message. If false, moves to trash.",
+                            default: false
+                        }
+                    },
+                    required: ["id"]
+                }
+            },
+            {
+                name: "gmail_modify_labels",
+                description: "Modify the labels on a message.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        id: {
+                            type: "string",
+                            description: "The ID of the message to modify"
+                        },
+                        addLabelIds: {
+                            type: "array",
+                            items: { type: "string" },
+                            description: "List of label IDs to add"
+                        },
+                        removeLabelIds: {
+                            type: "array",
+                            items: { type: "string" },
+                            description: "List of label IDs to remove"
+                        }
+                    },
+                    required: ["id"]
+                }
+            },
+            {
+                name: "gmail_list_labels",
+                description: "List all labels in the user's mailbox.",
+                inputSchema: {
+                    type: "object",
+                    properties: {}
+                }
+            },
+            {
+                name: "gmail_get_thread",
+                description: "Get a specific thread by ID.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        id: {
+                            type: "string",
+                            description: "The ID of the thread to retrieve"
+                        },
+                        format: {
+                            type: "string",
+                            description: "The format to return the thread in (full, minimal, metadata)",
+                            default: "full"
+                        }
+                    },
+                    required: ["id"]
+                }
+            },
+            {
+                name: "gmail_get_attachment",
+                description: "Get a specific attachment.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        messageId: {
+                            type: "string",
+                            description: "The ID of the message containing the attachment"
+                        },
+                        attachmentId: {
+                            type: "string",
+                            description: "The ID of the attachment to retrieve"
+                        }
+                    },
+                    required: ["messageId", "attachmentId"]
+                }
+            },
+            {
+                name: "gmail_star_message",
+                description: "Star a message in Gmail.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        id: {
+                            type: "string",
+                            description: "The ID of the message to star"
+                        }
+                    },
+                    required: ["id"]
+                }
+            },
+            {
+                name: "gmail_list_starred_messages",
+                description: "List starred messages.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        maxResults: {
+                            type: "integer",
+                            description: "Maximum number of messages to return (default 10)",
+                            default: 10
+                        }
+                    }
+                }
             }
         ]
     };
@@ -183,10 +331,59 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     content: [{ type: "text", text: JSON.stringify(sent, null, 2) }]
                 };
 
+
             case "gmail_create_draft":
                 const draft = await createDraftTool.createDraft(gmailClient, args);
                 return {
                     content: [{ type: "text", text: JSON.stringify(draft, null, 2) }]
+                };
+
+            case "gmail_search_messages":
+                const searchResults = await searchMessagesTool.searchMessages(gmailClient, args);
+                return {
+                    content: [{ type: "text", text: JSON.stringify(searchResults, null, 2) }]
+                };
+
+            case "gmail_delete_message":
+                const deleteResult = await deleteMessageTool.deleteMessage(gmailClient, args);
+                return {
+                    content: [{ type: "text", text: JSON.stringify(deleteResult, null, 2) }]
+                };
+
+            case "gmail_modify_labels":
+                const modifyResult = await modifyLabelsTool.modifyLabels(gmailClient, args);
+                return {
+                    content: [{ type: "text", text: JSON.stringify(modifyResult, null, 2) }]
+                };
+
+            case "gmail_list_labels":
+                const labels = await listLabelsTool.listLabels(gmailClient);
+                return {
+                    content: [{ type: "text", text: JSON.stringify(labels, null, 2) }]
+                };
+
+            case "gmail_get_thread":
+                const thread = await getThreadTool.getThread(gmailClient, args);
+                return {
+                    content: [{ type: "text", text: JSON.stringify(thread, null, 2) }]
+                };
+
+            case "gmail_get_attachment":
+                const attachment = await getAttachmentTool.getAttachment(gmailClient, args);
+                return {
+                    content: [{ type: "text", text: JSON.stringify(attachment, null, 2) }]
+                };
+
+            case "gmail_star_message":
+                const starResult = await starMessageTool.starMessage(gmailClient, args);
+                return {
+                    content: [{ type: "text", text: JSON.stringify(starResult, null, 2) }]
+                };
+
+            case "gmail_list_starred_messages":
+                const starredMessages = await listStarredMessagesTool.listStarredMessages(gmailClient, args);
+                return {
+                    content: [{ type: "text", text: JSON.stringify(starredMessages, null, 2) }]
                 };
 
             default:
