@@ -233,7 +233,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             {
                 name: "gmail_get_attachment",
-                description: "Get a specific attachment.",
+                description: "Get a specific attachment and save it to the user's Desktop.",
                 inputSchema: {
                     type: "object",
                     properties: {
@@ -244,6 +244,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                         attachmentId: {
                             type: "string",
                             description: "The ID of the attachment to retrieve"
+                        },
+                        filename: {
+                            type: "string",
+                            description: "The name of the file (optional, for display/download)"
+                        },
+                        mimeType: {
+                            type: "string",
+                            description: "The MIME type of the file (optional, for display/download)"
                         }
                     },
                     required: ["messageId", "attachmentId"]
@@ -344,8 +352,65 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 result = await getThreadTool.getThread(gmailClient, args);
                 break;
             case "gmail_get_attachment":
-                result = await getAttachmentTool.getAttachment(gmailClient, args);
-                break;
+                logger.info(`[gmail_get_attachment] Called with args: ${JSON.stringify(args)}`);
+                // Special handling for attachment to treat it as a resource
+                try {
+                    const attachmentData = await getAttachmentTool.getAttachment(gmailClient, args);
+                    const { data } = attachmentData; // This is base64url encoded
+                    const { filename, mimeType } = args;
+
+                    if (!data) {
+                        logger.error("[gmail_get_attachment] No data found in attachment response");
+                        throw new Error("No data found in attachment response");
+                    }
+
+                    const base64Data = data.replace(/-/g, '+').replace(/_/g, '/');
+                    logger.info(`[gmail_get_attachment] Data length: ${base64Data.length}, MimeType: ${mimeType}`);
+
+                    // Save to Desktop
+                    const buffer = Buffer.from(base64Data, 'base64');
+                    const homeDir = process.env.HOME || process.env.USERPROFILE;
+                    const cleanFilename = (filename || 'attachment').replace(/[^a-zA-Z0-9._-]/g, '_');
+                    const desktopPath = path.join(homeDir, 'Desktop', cleanFilename);
+
+                    try {
+                        const fs = require('fs');
+                        fs.writeFileSync(desktopPath, buffer);
+                        logger.info(`[gmail_get_attachment] Saved to ${desktopPath}`);
+
+                        return {
+                            content: [
+                                {
+                                    type: "text",
+                                    text: `Successfully saved attachment to your Desktop: ${desktopPath}`
+                                }
+                            ]
+                        };
+                    } catch (fsError) {
+                        logger.error(`[gmail_get_attachment] Failed to save to desktop: ${fsError.message}`);
+                        // Fallback to resource if local save fails
+                        return {
+                            content: [
+                                {
+                                    type: "text",
+                                    text: `Failed to save to Desktop (${fsError.message}). Here is the resource download instead:`
+                                },
+                                {
+                                    type: "resource",
+                                    resource: {
+                                        uri: `attachment://${args.messageId}/${args.attachmentId}/${filename || 'attachment'}`,
+                                        mimeType: mimeType || 'application/octet-stream',
+                                        blob: base64Data
+                                    }
+                                }
+                            ]
+                        };
+                    }
+                } catch (error) {
+                    logger.error(`[gmail_get_attachment] Error: ${error.message}`);
+                    throw error;
+                }
+
             case "gmail_star_message":
                 result = await starMessageTool.starMessage(gmailClient, args);
                 break;
