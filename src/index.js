@@ -281,6 +281,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     };
 });
 
+const { saveTokens, deleteTokens } = require('./security/token_store');
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Lazy auth check
     if (!gmailClient) {
@@ -312,87 +314,77 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
     try {
+        let result;
         switch (name) {
             case "gmail_list_messages":
-                const messages = await listMessagesTool.listMessages(gmailClient, args);
-                return {
-                    content: [{ type: "text", text: JSON.stringify(messages, null, 2) }]
-                };
-
+                result = await listMessagesTool.listMessages(gmailClient, args);
+                break;
             case "gmail_get_message":
-                const message = await getMessageTool.getMessage(gmailClient, args);
-                return {
-                    content: [{ type: "text", text: JSON.stringify(message, null, 2) }]
-                };
-
+                result = await getMessageTool.getMessage(gmailClient, args);
+                break;
             case "gmail_send_email":
-                const sent = await sendEmailTool.sendEmail(gmailClient, args);
-                return {
-                    content: [{ type: "text", text: JSON.stringify(sent, null, 2) }]
-                };
-
-
+                result = await sendEmailTool.sendEmail(gmailClient, args);
+                break;
             case "gmail_create_draft":
-                const draft = await createDraftTool.createDraft(gmailClient, args);
-                return {
-                    content: [{ type: "text", text: JSON.stringify(draft, null, 2) }]
-                };
-
+                result = await createDraftTool.createDraft(gmailClient, args);
+                break;
             case "gmail_search_messages":
-                const searchResults = await searchMessagesTool.searchMessages(gmailClient, args);
-                return {
-                    content: [{ type: "text", text: JSON.stringify(searchResults, null, 2) }]
-                };
-
+                result = await searchMessagesTool.searchMessages(gmailClient, args);
+                break;
             case "gmail_delete_message":
-                const deleteResult = await deleteMessageTool.deleteMessage(gmailClient, args);
-                return {
-                    content: [{ type: "text", text: JSON.stringify(deleteResult, null, 2) }]
-                };
-
+                result = await deleteMessageTool.deleteMessage(gmailClient, args);
+                break;
             case "gmail_modify_labels":
-                const modifyResult = await modifyLabelsTool.modifyLabels(gmailClient, args);
-                return {
-                    content: [{ type: "text", text: JSON.stringify(modifyResult, null, 2) }]
-                };
-
+                result = await modifyLabelsTool.modifyLabels(gmailClient, args);
+                break;
             case "gmail_list_labels":
-                const labels = await listLabelsTool.listLabels(gmailClient);
-                return {
-                    content: [{ type: "text", text: JSON.stringify(labels, null, 2) }]
-                };
-
+                result = await listLabelsTool.listLabels(gmailClient);
+                break;
             case "gmail_get_thread":
-                const thread = await getThreadTool.getThread(gmailClient, args);
-                return {
-                    content: [{ type: "text", text: JSON.stringify(thread, null, 2) }]
-                };
-
+                result = await getThreadTool.getThread(gmailClient, args);
+                break;
             case "gmail_get_attachment":
-                const attachment = await getAttachmentTool.getAttachment(gmailClient, args);
-                return {
-                    content: [{ type: "text", text: JSON.stringify(attachment, null, 2) }]
-                };
-
+                result = await getAttachmentTool.getAttachment(gmailClient, args);
+                break;
             case "gmail_star_message":
-                const starResult = await starMessageTool.starMessage(gmailClient, args);
-                return {
-                    content: [{ type: "text", text: JSON.stringify(starResult, null, 2) }]
-                };
-
+                result = await starMessageTool.starMessage(gmailClient, args);
+                break;
             case "gmail_list_starred_messages":
-                const starredMessages = await listStarredMessagesTool.listStarredMessages(gmailClient, args);
-                return {
-                    content: [{ type: "text", text: JSON.stringify(starredMessages, null, 2) }]
-                };
-
+                result = await listStarredMessagesTool.listStarredMessages(gmailClient, args);
+                break;
             default:
                 throw new Error(`Unknown tool: ${name}`);
         }
-    } catch (error) {
-        logger.error(`Error executing tool ${name}: ${error.message}`);
+
         return {
-            content: [{ type: "text", text: `Error: ${error.message}` }],
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+        };
+
+    } catch (error) {
+        const errorMessage = error.message || '';
+        // Check for common auth errors: 401, 403 with "insufficient permissions", or "invalid_grant"
+        if (errorMessage.includes('401') ||
+            errorMessage.includes('invalid_grant') ||
+            (errorMessage.includes('403') && errorMessage.includes('insufficient permissions'))) {
+
+            logger.error(`Authentication error detected: ${errorMessage}. Resetting tokens.`);
+
+            // Delete the invalid tokens
+            await deleteTokens();
+            gmailClient = null;
+
+            // Generate a fresh auth URL
+            const authUrl = await startAuthServer();
+
+            return {
+                content: [{ type: "text", text: `Authentication Session Expired.\n\nYour previous session is no longer valid. Please re-authenticate by visiting this URL:\n${authUrl}\n\nAfter you log in, please try your request again.` }],
+                isError: true,
+            };
+        }
+
+        logger.error(`Error executing tool ${name}: ${errorMessage}`);
+        return {
+            content: [{ type: "text", text: `Error: ${errorMessage}` }],
             isError: true,
         };
     }

@@ -32,7 +32,20 @@ async function loadTokens() {
     }
 }
 
+async function deleteTokens() {
+    try {
+        await fs.unlink(TOKEN_PATH);
+        console.error('Tokens deleted.');
+    } catch (error) {
+        if (error.code !== 'ENOENT') {
+            console.error('Error deleting tokens:', error);
+            throw error;
+        }
+    }
+}
+
 module.exports = {
     saveTokens,
-    loadTokens
+    loadTokens,
+    deleteTokens
 };

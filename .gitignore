@@ -7,3 +7,4 @@ yarn-error.log*
 tokens.json
 Logs/
 server.log
+.saved_tokens.json
